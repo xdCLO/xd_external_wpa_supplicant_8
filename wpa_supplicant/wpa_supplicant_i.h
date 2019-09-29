@@ -760,6 +760,7 @@ struct wpa_supplicant {
 	unsigned int connection_ht:1;
 	unsigned int connection_vht:1;
 	unsigned int connection_he:1;
+	unsigned int disable_mbo_oce:1;
 	unsigned int connection_vht_max_eight_spatial_streams:1;
 	unsigned int connection_twt:1;
 
@@ -833,6 +834,7 @@ struct wpa_supplicant {
 	unsigned int mesh_if_created:1;
 	unsigned int mesh_ht_enabled:1;
 	unsigned int mesh_vht_enabled:1;
+	unsigned int mesh_he_enabled:1;
 	struct wpa_driver_mesh_join_params *mesh_params;
 #ifdef CONFIG_PMKSA_CACHE_EXTERNAL
 	/* struct external_pmksa_cache::list */
@@ -1305,7 +1307,7 @@ struct wpa_ssid * wpa_supplicant_get_ssid(struct wpa_supplicant *wpa_s);
 const char * wpa_supplicant_get_eap_mode(struct wpa_supplicant *wpa_s);
 void wpa_supplicant_cancel_auth_timeout(struct wpa_supplicant *wpa_s);
 void wpa_supplicant_deauthenticate(struct wpa_supplicant *wpa_s,
-				   int reason_code);
+				   u16 reason_code);
 
 struct wpa_ssid * wpa_supplicant_add_network(struct wpa_supplicant *wpa_s);
 int wpa_supplicant_remove_network(struct wpa_supplicant *wpa_s, int id);
@@ -1400,6 +1402,8 @@ int wpas_mbo_ie(struct wpa_supplicant *wpa_s, u8 *buf, size_t len,
 		int add_oce_capa);
 const u8 * mbo_attr_from_mbo_ie(const u8 *mbo_ie, enum mbo_attr_id attr);
 const u8 * wpas_mbo_get_bss_attr(struct wpa_bss *bss, enum mbo_attr_id attr);
+void wpas_mbo_check_pmf(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
+			struct wpa_ssid *ssid);
 const u8 * mbo_get_attr_from_ies(const u8 *ies, size_t ies_len,
 				 enum mbo_attr_id attr);
 int wpas_mbo_update_non_pref_chan(struct wpa_supplicant *wpa_s,
@@ -1428,6 +1432,12 @@ enum chan_allowed verify_channel(struct hostapd_hw_modes *mode, u8 channel,
 size_t wpas_supp_op_class_ie(struct wpa_supplicant *wpa_s,
 			     struct wpa_ssid *ssid,
 			     int freq, u8 *pos, size_t len);
+
+int wpas_enable_mac_addr_randomization(struct wpa_supplicant *wpa_s,
+				       unsigned int type, const u8 *addr,
+				       const u8 *mask);
+int wpas_disable_mac_addr_randomization(struct wpa_supplicant *wpa_s,
+					unsigned int type);
 
 /**
  * wpa_supplicant_ctrl_iface_ctrl_rsp_handle - Handle a control response
@@ -1489,6 +1499,24 @@ static inline int network_is_persistent_group(struct wpa_ssid *ssid)
 {
 	return ssid->disabled == 2 && ssid->p2p_persistent_group;
 }
+
+static inline int wpas_mode_to_ieee80211_mode(enum wpas_mode mode)
+{
+	switch (mode) {
+	default:
+	case WPAS_MODE_INFRA:
+		return IEEE80211_MODE_INFRA;
+	case WPAS_MODE_IBSS:
+		return IEEE80211_MODE_IBSS;
+	case WPAS_MODE_AP:
+	case WPAS_MODE_P2P_GO:
+	case WPAS_MODE_P2P_GROUP_FORMATION:
+		return IEEE80211_MODE_AP;
+	case WPAS_MODE_MESH:
+		return IEEE80211_MODE_MESH;
+	}
+}
+
 
 int wpas_network_disabled(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid);
 int wpas_get_ssid_pmf(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid);

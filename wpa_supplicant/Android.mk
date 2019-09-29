@@ -16,15 +16,16 @@ ifeq ($(BOARD_WLAN_DEVICE), qcwcn)
   CONFIG_DRIVER_NL80211_QCA=y
 endif
 
-ifndef QC_WIFI_NO_WPA3
-  CONFIG_OWE=y
-  CONFIG_DPP=y
-  CONFIG_SAE=y
-  CONFIG_SUITEB=y
-  CONFIG_SUITEB192=y
-endif
-
 include $(LOCAL_PATH)/android.config
+
+ifeq ($(call is-board-platform-in-list,sdm660 msm8998),true)
+  $(warning "Disabling WPA3 support in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
+  CONFIG_OWE=n
+  CONFIG_DPP=n
+  CONFIG_SAE=n
+  CONFIG_MESH=n
+  CONFIG_SUITEB192=n
+endif
 
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
@@ -104,7 +105,6 @@ INCLUDES += $(LOCAL_PATH)/src/eap_common
 INCLUDES += $(LOCAL_PATH)/src/eapol_supp
 INCLUDES += $(LOCAL_PATH)/src/eap_peer
 INCLUDES += $(LOCAL_PATH)/src/eap_server
-INCLUDES += $(LOCAL_PATH)/src/hlr_auc_gw
 INCLUDES += $(LOCAL_PATH)/src/l2_packet
 INCLUDES += $(LOCAL_PATH)/src/radius
 INCLUDES += $(LOCAL_PATH)/src/rsn_supp
@@ -242,7 +242,7 @@ NEED_SHA256=y
 NEED_AES_OMAC1=y
 endif
 
-ifdef CONFIG_SUITEB192
+ifeq ($(CONFIG_SUITEB192),y)
 L_CFLAGS += -DCONFIG_SUITEB192
 NEED_SHA384=y
 endif
@@ -266,7 +266,7 @@ NEED_SHA256=y
 NEED_AES_OMAC1=y
 endif
 
-ifdef CONFIG_MESH
+ifeq ($(CONFIG_MESH),y)
 NEED_80211_COMMON=y
 NEED_SHA256=y
 NEED_AES_SIV=y
@@ -278,14 +278,15 @@ OBJS += mesh_mpm.c
 OBJS += mesh_rsn.c
 endif
 
-ifdef CONFIG_SAE
+ifeq ($(CONFIG_SAE),y)
 L_CFLAGS += -DCONFIG_SAE
 OBJS += src/common/sae.c
 NEED_ECC=y
 NEED_DH_GROUPS=y
+NEED_DRAGONFLY=y
 endif
 
-ifdef CONFIG_DPP
+ifeq ($(CONFIG_DPP),y)
 L_CFLAGS += -DCONFIG_DPP
 OBJS += src/common/dpp.c
 OBJS += dpp_supplicant.c
@@ -304,7 +305,7 @@ L_CFLAGS += -DCONFIG_DPP2
 endif
 endif
 
-ifdef CONFIG_OWE
+ifeq ($(CONFIG_OWE),y)
 L_CFLAGS += -DCONFIG_OWE
 NEED_ECC=y
 NEED_HMAC_SHA256_KDF=y
@@ -688,6 +689,23 @@ CONFIG_IEEE8021X_EAPOL=y
 NEED_T_PRF=y
 endif
 
+ifdef CONFIG_EAP_TEAP
+# EAP-TEAP
+ifeq ($(CONFIG_EAP_TEAP), dyn)
+L_CFLAGS += -DEAP_YEAP_DYNAMIC
+EAPDYN += src/eap_peer/eap_teap.so
+EAPDYN += src/eap_common/eap_teap_common.c
+else
+L_CFLAGS += -DEAP_TEAP
+OBJS += src/eap_peer/eap_teap.c src/eap_peer/eap_teap_pac.c
+OBJS += src/eap_common/eap_teap_common.c
+endif
+TLS_FUNCS=y
+CONFIG_IEEE8021X_EAPOL=y
+NEED_T_PRF=y
+NEED_SHA384=y
+endif
+
 ifdef CONFIG_EAP_PAX
 # EAP-PAX
 ifeq ($(CONFIG_EAP_PAX), dyn)
@@ -735,6 +753,7 @@ OBJS += src/eap_peer/eap_pwd.c src/eap_common/eap_pwd_common.c
 CONFIG_IEEE8021X_EAPOL=y
 NEED_SHA256=y
 NEED_ECC=y
+NEED_DRAGONFLY=y
 endif
 
 ifdef CONFIG_EAP_EKE
@@ -952,7 +971,7 @@ L_CFLAGS += -DEAP_SERVER_WSC
 OBJS += src/ap/wps_hostapd.c
 OBJS += src/eap_server/eap_server_wsc.c
 endif
-ifdef CONFIG_DPP
+ifeq ($(CONFIG_DPP),y)
 OBJS += src/ap/dpp_hostapd.c
 OBJS += src/ap/gas_query_ap.c
 endif
@@ -1022,6 +1041,10 @@ endif
 
 ifdef CONFIG_SMARTCARD
 L_CFLAGS += -DCONFIG_SMARTCARD
+endif
+
+ifdef NEED_DRAGONFLY
+OBJS += src/common/dragonfly.c
 endif
 
 ifdef MS_FUNCS
@@ -1767,6 +1790,7 @@ ifeq ($(WPA_SUPPLICANT_USE_HIDL), y)
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.0
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.1
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.2
+LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.3
 ifeq ($(SUPPLICANT_VENDOR_HIDL), y)
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.0
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.1
@@ -1823,7 +1847,7 @@ LOCAL_VENDOR_MODULE := true
 LOCAL_CPPFLAGS := $(L_CPPFLAGS)
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_C_INCLUDES := $(INCLUDES)
-HIDL_INTERFACE_VERSION = 1.2
+HIDL_INTERFACE_VERSION = 1.3
 LOCAL_SRC_FILES := \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl.cpp \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl_manager.cpp \
@@ -1846,6 +1870,7 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.supplicant@1.0 \
     android.hardware.wifi.supplicant@1.1 \
     android.hardware.wifi.supplicant@1.2 \
+    android.hardware.wifi.supplicant@1.3 \
     libbase \
     libhidlbase \
     libhidltransport \
