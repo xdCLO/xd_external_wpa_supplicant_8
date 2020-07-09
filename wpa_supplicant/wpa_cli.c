@@ -1706,15 +1706,25 @@ static char ** wpa_cli_complete_bss(const char *str, int pos)
 static int wpa_cli_cmd_get_capability(struct wpa_ctrl *ctrl, int argc,
 				      char *argv[])
 {
-	if (argc < 1 || argc > 2) {
-		printf("Invalid GET_CAPABILITY command: need either one or "
-		       "two arguments\n");
+	if (argc < 1 || argc > 3) {
+		printf("Invalid GET_CAPABILITY command: need at least one argument and max three arguments\n");
 		return -1;
 	}
 
-	if ((argc == 2) && os_strcmp(argv[1], "strict") != 0) {
-		printf("Invalid GET_CAPABILITY command: second argument, "
-		       "if any, must be 'strict'\n");
+	if (argc > 1 && os_strcmp(argv[0], "key_mgmt") != 0 &&
+	    os_strncmp(argv[1], "iftype=", 7) == 0) {
+		printf("Invalid GET_CAPABILITY command: 'iftype=' param is allowed only for 'key_mgmt'\n");
+		return -1;
+	}
+
+	if (argc == 2 && os_strcmp(argv[1], "strict") != 0 &&
+	    os_strncmp(argv[1], "iftype=", 7) != 0) {
+		printf("Invalid GET_CAPABILITY command: the second argument, if any, must be 'strict' OR 'iftype=<iftype_name>'\n");
+		return -1;
+	}
+
+	if (argc == 3 && os_strcmp(argv[2], "strict") != 0) {
+		printf("Invalid GET_CAPABILITY command: the third argument, if any, must be 'strict'\n");
 		return -1;
 	}
 
@@ -1741,7 +1751,13 @@ static char ** wpa_cli_complete_get_capability(const char *str, int pos)
 		"acs",
 #endif /* CONFIG_ACS */
 	};
+	const char *iftypes[] = {
+		"iftype=STATION", "iftype=AP", "iftype=P2P_CLIENT",
+		"iftype=P2P_GO", "iftype=AP_VLAN", "iftype=IBSS", "iftype=NAN",
+		"iftype=P2P_DEVICE", "iftype=MESH",
+	};
 	int i, num_fields = ARRAY_SIZE(fields);
+	int num_iftypes = ARRAY_SIZE(iftypes);
 	char **res = NULL;
 
 	if (arg == 1) {
@@ -1755,6 +1771,21 @@ static char ** wpa_cli_complete_get_capability(const char *str, int pos)
 		}
 	}
 	if (arg == 2) {
+		/* the second argument can be "iftype=<iftype_name>" OR
+		 * "strict" */
+		res = os_calloc(num_iftypes + 2, sizeof(char *));
+		if (!res)
+			return NULL;
+		res[0] = os_strdup("strict");
+		if (!res[0])
+			return res;
+		for (i = 0; i < num_iftypes; i++) {
+			res[i + 1] = os_strdup(iftypes[i]);
+			if (!res[i + 1])
+				return res;
+		}
+	}
+	if (arg == 3) {
 		res = os_calloc(1 + 1, sizeof(char *));
 		if (res == NULL)
 			return NULL;
@@ -3028,6 +3059,78 @@ static int wpa_cli_cmd_dpp_pkex_remove(struct wpa_ctrl *ctrl, int argc,
 #endif /* CONFIG_DPP */
 
 
+static int wpa_ctrl_command_bss(struct wpa_ctrl *ctrl, const char *cmd)
+{
+	char buf[512], *pos, *bssid, *freq, *level, *flags, *ssid;
+	size_t len;
+	int ret, id = -1;
+
+	if (!ctrl_conn)
+		return -1;
+	len = sizeof(buf) - 1;
+	ret = wpa_ctrl_request(ctrl, cmd, os_strlen(cmd), buf, &len,
+			       wpa_cli_msg_cb);
+	if (ret == -2) {
+		printf("'%s' command timed out.\n", cmd);
+		return -2;
+	} else if (ret < 0) {
+		printf("'%s' command failed.\n", cmd);
+		return -1;
+	}
+
+	buf[len] = '\0';
+	if (os_memcmp(buf, "FAIL", 4) == 0)
+		return -1;
+
+	pos = buf;
+	while (*pos != '\0') {
+		if (str_starts(pos, "id="))
+			id = atoi(pos + 3);
+		if (str_starts(pos, "bssid="))
+			bssid = pos + 6;
+		if (str_starts(pos, "freq="))
+			freq = pos + 5;
+		if (str_starts(pos, "level="))
+			level = pos + 6;
+		if (str_starts(pos, "flags="))
+			flags = pos + 6;
+		if (str_starts(pos, "ssid="))
+			ssid = pos + 5;
+
+		while (*pos != '\0' && *pos != '\n')
+			pos++;
+		*pos++ = '\0';
+	}
+	if (id != -1)
+		printf("%s\t%s\t%s\t%s\t%s\n", bssid, freq, level, flags, ssid);
+	return id;
+}
+
+
+static int wpa_cli_cmd_all_bss(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	char cmd[64];
+	int id = -1;
+	unsigned int mask;
+
+	printf("bssid / frequency / signal level / flags / ssid\n");
+
+	mask = WPA_BSS_MASK_ID | WPA_BSS_MASK_BSSID | WPA_BSS_MASK_FREQ |
+		WPA_BSS_MASK_LEVEL | WPA_BSS_MASK_FLAGS | WPA_BSS_MASK_SSID;
+	do {
+		if (id < 0)
+			os_snprintf(cmd, sizeof(cmd), "BSS FIRST MASK=0x%x",
+				    mask);
+		else
+			os_snprintf(cmd, sizeof(cmd), "BSS NEXT-%d MASK=0x%x",
+				    id, mask);
+		id = wpa_ctrl_command_bss(ctrl, cmd);
+	} while (id >= 0);
+
+	return 0;
+}
+
+
 enum wpa_cli_cmd_flags {
 	cli_cmd_flag_none		= 0x00,
 	cli_cmd_flag_sensitive		= 0x01
@@ -3687,6 +3790,8 @@ static const struct wpa_cli_cmd wpa_cli_commands[] = {
 	  cli_cmd_flag_none,
 	  "*|<id> = remove DPP pkex information" },
 #endif /* CONFIG_DPP */
+	{ "all_bss", wpa_cli_cmd_all_bss, NULL, cli_cmd_flag_none,
+	  "= list all BSS entries (scan results)" },
 	{ NULL, NULL, NULL, cli_cmd_flag_none, NULL }
 };
 
