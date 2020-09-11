@@ -1835,7 +1835,7 @@ struct wpabuf * mb_ies_by_info(struct mb_ies_info *info)
 }
 
 
-const struct oper_class_map global_op_class[] = {
+struct oper_class_map global_op_class[] = {
 	{ HOSTAPD_MODE_IEEE80211G, 81, 1, 13, 1, BW20, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211G, 82, 14, 14, 1, BW20, NO_P2P_SUPP },
 
@@ -2897,4 +2897,14 @@ enum chan_width get_sta_operation_chan_width(
 		return (sta_supported_chan_width.is_80p80_supported)
 			? CHAN_WIDTH_80P80 : CHAN_WIDTH_80;
 	return ap_operation_chan_width;
+}
+
+void disable_p2p_in_6ghz_op_classes(void)
+{
+	int op;
+
+	for (op = 0; global_op_class[op].op_class; op++) {
+		if (is_6ghz_op_class(global_op_class[op].op_class))
+			global_op_class[op].p2p = NO_P2P_SUPP;
+	}
 }

@@ -290,6 +290,47 @@ static void wpas_p2p_scan_res_handler(struct wpa_supplicant *wpa_s,
 	p2p_scan_res_handled(wpa_s->global->p2p);
 }
 
+static int wpas_p2p_add_scan_freq_list(struct wpa_supplicant *wpa_s,
+				       enum hostapd_hw_mode band,
+				       struct wpa_driver_scan_params *params)
+{
+	struct hostapd_hw_modes *mode;
+	int num_chans = 0;
+	int *freqs;
+
+	mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes, band, 0);
+
+	if (params->freqs) {
+		while (params->freqs[num_chans])
+			num_chans++;
+	}
+
+	freqs = os_realloc(params->freqs,
+			   (num_chans + mode->num_channels + 1) * sizeof(int));
+	if (freqs == NULL) {
+		int *freqs = os_calloc(num_chans + mode->num_channels + 1,
+				       sizeof(int));
+
+		if (freqs == NULL)
+			return -1;
+
+		if (params->freqs) {
+			os_memcpy(freqs, params->freqs,
+				  (num_chans * sizeof(int)));
+			os_free(params->freqs);
+		}
+	}
+	params->freqs = freqs;
+
+	for (int i = 0; i < mode->num_channels; i++) {
+		if (mode->channels[i].flag & HOSTAPD_CHAN_DISABLED)
+			continue;
+		params->freqs[num_chans++] = mode->channels[i].freq;
+	}
+	params->freqs[num_chans] = 0;
+
+	return 0;
+}
 
 static void wpas_p2p_trigger_scan_cb(struct wpa_radio_work *work, int deinit)
 {
@@ -311,6 +352,14 @@ static void wpas_p2p_trigger_scan_cb(struct wpa_radio_work *work, int deinit)
 		wpa_printf(MSG_DEBUG,
 			   "Request driver to clear scan cache due to local BSS flush");
 		params->only_new_results = 1;
+	}
+
+	if ((wpa_s->conf->p2p_6ghz_disable) && (params->freqs == NULL)) {
+		wpa_printf(MSG_DEBUG, "6G: 6GHz disabled. Update the scan frequency list");
+		wpas_p2p_add_scan_freq_list(wpa_s, HOSTAPD_MODE_IEEE80211G,
+					    params);
+		wpas_p2p_add_scan_freq_list(wpa_s, HOSTAPD_MODE_IEEE80211A,
+					    params);
 	}
 	ret = wpa_drv_scan(wpa_s, params);
 	if (ret == 0)
@@ -4643,6 +4692,11 @@ int wpas_p2p_init(struct wpa_global *global, struct wpa_supplicant *wpa_s)
 	if (wpa_s->wps) {
 		os_memcpy(p2p.uuid, wpa_s->wps->uuid, 16);
 		p2p.config_methods = wpa_s->wps->config_methods;
+	}
+
+	if (wpa_s->conf->p2p_6ghz_disable) {
+		wpa_printf(MSG_DEBUG, "P2P: 6GHz disabled");
+		disable_p2p_in_6ghz_op_classes();
 	}
 
 	if (wpas_p2p_setup_channels(wpa_s, &p2p.channels, &p2p.cli_channels)) {
