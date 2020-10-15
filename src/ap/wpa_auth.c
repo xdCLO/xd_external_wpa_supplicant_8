@@ -2765,7 +2765,7 @@ static struct wpabuf * fils_prepare_plainbuf(struct wpa_state_machine *sm,
 	*len = (u8 *) wpabuf_put(plain, 0) - len - 1;
 
 #ifdef CONFIG_OCV
-	if (wpa_auth_get_ocv(sm)) {
+	if (wpa_auth_uses_ocv(sm)) {
 		struct wpa_channel_info ci;
 		u8 *pos;
 
@@ -3027,7 +3027,7 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
 		return;
 	}
 #ifdef CONFIG_OCV
-	if (wpa_auth_get_ocv(sm)) {
+	if (wpa_auth_uses_ocv(sm)) {
 		struct wpa_channel_info ci;
 		int tx_chanwidth;
 		int tx_seg1_idx;
@@ -3047,10 +3047,10 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
 
 		res = ocv_verify_tx_params(kde.oci, kde.oci_len, &ci,
 					   tx_chanwidth, tx_seg1_idx);
-		if (wpa_auth_get_ocv(sm) == 2 && res == OCI_NOT_FOUND) {
+		if (wpa_auth_uses_ocv(sm) == 2 && res == OCI_NOT_FOUND) {
+			/* Work around misbehaving STAs */
 			wpa_auth_vlogger(wpa_auth, sm->addr, LOGGER_INFO,
-					 "Disable OCV with the STA that "
-					 "doesn't send OCI");
+					 "Disable OCV with a STA that does not send OCI");
 			wpa_auth_set_ocv(sm, 0);
 		} else if (res != OCI_SUCCESS) {
 			wpa_auth_logger(wpa_auth, sm->addr, LOGGER_INFO,
@@ -3210,7 +3210,7 @@ static u8 * ieee80211w_kde_add(struct wpa_state_machine *sm, u8 *pos)
 static int ocv_oci_len(struct wpa_state_machine *sm)
 {
 #ifdef CONFIG_OCV
-	if (wpa_auth_get_ocv(sm))
+	if (wpa_auth_uses_ocv(sm))
 		return OCV_OCI_KDE_LEN;
 #endif /* CONFIG_OCV */
 	return 0;
@@ -3221,7 +3221,7 @@ static int ocv_oci_add(struct wpa_state_machine *sm, u8 **argpos)
 #ifdef CONFIG_OCV
 	struct wpa_channel_info ci;
 
-	if (!wpa_auth_get_ocv(sm))
+	if (!wpa_auth_uses_ocv(sm))
 		return 0;
 
 	if (wpa_channel_info(sm->wpa_auth, &ci) != 0) {
@@ -3833,7 +3833,7 @@ SM_STATE(WPA_PTK_GROUP, REKEYESTABLISHED)
 		return;
 	}
 
-	if (wpa_auth_get_ocv(sm)) {
+	if (wpa_auth_uses_ocv(sm)) {
 		struct wpa_channel_info ci;
 		int tx_chanwidth;
 		int tx_seg1_idx;

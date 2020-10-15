@@ -3480,7 +3480,7 @@ static int check_assoc_ies(struct hostapd_data *hapd, struct sta_info *sta,
 #endif /* CONFIG_MBO */
 
 #if defined(CONFIG_FILS) && defined(CONFIG_OCV)
-	if (wpa_auth_get_ocv(sta->wpa_sm) &&
+	if (wpa_auth_uses_ocv(sta->wpa_sm) &&
 	    (sta->auth_alg == WLAN_AUTH_FILS_SK ||
 	     sta->auth_alg == WLAN_AUTH_FILS_SK_PFS ||
 	     sta->auth_alg == WLAN_AUTH_FILS_PK)) {
@@ -3503,10 +3503,11 @@ static int check_assoc_ies(struct hostapd_data *hapd, struct sta_info *sta,
 
 		res = ocv_verify_tx_params(elems.oci, elems.oci_len, &ci,
 					   tx_chanwidth, tx_seg1_idx);
-		if (wpa_auth_get_ocv(sta->wpa_sm) == 2 &&
+		if (wpa_auth_uses_ocv(sta->wpa_sm) == 2 &&
 		    res == OCI_NOT_FOUND) {
-			wpa_printf(MSG_WARNING, "FILS: Disable OCV with the "
-				   "STA that doesn't send OCI");
+			/* Work around misbehaving STAs */
+			wpa_printf(MSG_INFO,
+				   "FILS: Disable OCV with a STA that does not send OCI");
 			wpa_auth_set_ocv(sta->wpa_sm, 0);
 		} else if (res != OCI_SUCCESS) {
 			wpa_printf(MSG_WARNING, "FILS: %s", ocv_errorstr);
