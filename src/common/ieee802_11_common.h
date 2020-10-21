@@ -234,7 +234,7 @@ struct oper_class_map {
 	enum { P2P_SUPP, NO_P2P_SUPP } p2p;
 };
 
-extern struct oper_class_map global_op_class[];
+extern const struct oper_class_map global_op_class[];
 extern size_t global_op_class_size;
 
 const u8 * get_ie(const u8 *ies, size_t len, u8 eid);
@@ -314,8 +314,6 @@ static inline int for_each_element_completed(const struct element *element,
 }
 
 struct ieee80211_edmg_config;
-
-void disable_p2p_in_6ghz_op_classes(void);
 
 void hostapd_encode_edmg_chan(int edmg_enable, u8 edmg_channel,
 			      int primary_channel,
