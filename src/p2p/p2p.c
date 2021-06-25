@@ -5568,3 +5568,56 @@ struct wpabuf * p2p_build_probe_resp_template(struct p2p_data *p2p,
 
 	return buf;
 }
+
+
+bool p2p_is_peer_6ghz_capab(struct p2p_data *p2p, const u8 *addr)
+{
+	struct p2p_device *dev;
+
+	dev = p2p_get_device(p2p, addr);
+	if (!dev)
+		return false;
+
+	return !!(dev->info.dev_capab & P2P_DEV_CAPAB_6GHZ_BAND_CAPABLE);
+}
+
+
+void p2p_set_6ghz_dev_capab(struct p2p_data *p2p, bool allow_6ghz)
+{
+	p2p->p2p_6ghz_capable = allow_6ghz;
+	p2p_dbg(p2p, "Set 6 GHz capability to %d", allow_6ghz);
+
+	if (allow_6ghz)
+		p2p->dev_capab |= P2P_DEV_CAPAB_6GHZ_BAND_CAPABLE;
+	else
+		p2p->dev_capab &= ~P2P_DEV_CAPAB_6GHZ_BAND_CAPABLE;
+}
+
+
+bool is_p2p_6ghz_capable(struct p2p_data *p2p)
+{
+	return p2p->p2p_6ghz_capable;
+}
+
+
+bool p2p_wfd_enabled(struct p2p_data *p2p)
+{
+#ifdef CONFIG_WIFI_DISPLAY
+	return p2p->wfd_ie_probe_req != NULL;
+#else /* CONFIG_WIFI_DISPLAY */
+	return false;
+#endif /* CONFIG_WIFI_DISPLAY */
+}
+
+
+bool p2p_peer_wfd_enabled(struct p2p_data *p2p, const u8 *peer_addr)
+{
+#ifdef CONFIG_WIFI_DISPLAY
+	struct p2p_device *dev;
+
+	dev = p2p_get_device(p2p, peer_addr);
+	return dev && dev->info.wfd_subelems != NULL;
+#else /* CONFIG_WIFI_DISPLAY */
+	return false;
+#endif /* CONFIG_WIFI_DISPLAY */
+}
